@@ -1,29 +1,18 @@
 import pytest
-from playwright.sync_api import sync_playwright
 from data.constants import ADMIN_PASSWORD, ADMIN_USERNAME
+from pages.candidates_page import CandidatesPage
 from pages.dashboard_page import DashboardPage
 from pages.login_page import LoginPage
 from pages.vacancies_page import VacanciesPage
 
+
 @pytest.fixture
-def admin_login():
-    """Fixture to launch browser, login as Admin, and provide page for a test."""
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=False, slow_mo=200)  
-        context = browser.new_context()
-        page = context.new_page()
-
-    
-        login_page = LoginPage(page)
-        login_page.navigate()
-        login_page.login(ADMIN_USERNAME, ADMIN_PASSWORD)
-
-    
-        yield page
-
-        
-        context.close()
-        browser.close()
+def admin_login(page, base_url):
+    """Return a logged-in page using pytest-playwright's built-in page fixture."""
+    login = LoginPage(page)
+    login.navigate(base_url)
+    login.login(ADMIN_USERNAME, ADMIN_PASSWORD)
+    return page
 
 
 @pytest.fixture
@@ -52,3 +41,31 @@ def vacancy_factory(admin_login):
         dashboard.go_to_recruitment()
         vacancies.open_vacancies()
         vacancies.delete_vacancies_by_name(vacancy_name)
+
+
+@pytest.fixture
+def candidate_factory(admin_login):
+    page = admin_login
+    dashboard = DashboardPage(page)
+    candidates = CandidatesPage(page)
+    created_candidates = []
+
+    def _create(candidate_data):
+        dashboard.go_to_recruitment()
+        candidates.open_candidates()
+        candidates.delete_candidates_by_name(candidate_data.full_name)
+        dashboard.go_to_recruitment()
+        candidates.open_candidates()
+        candidates.add_candidate(candidate_data)
+        created_candidates.append(candidate_data)
+        return {
+            "page": page,
+            "candidate": candidate_data,
+        }
+
+    yield _create
+
+    for candidate_data in reversed(created_candidates):
+        dashboard.go_to_recruitment()
+        candidates.open_candidates()
+        candidates.delete_candidates_by_name(candidate_data.full_name)
